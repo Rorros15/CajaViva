@@ -1,0 +1,2010 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>CajaViva - Recopilador de Ventas en Vivo</title>
+
+    <!-- Tipografía Inter de Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- SheetJS para exportación real a Excel (.xlsx) -->
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'system-ui', '-apple-system', 'Roboto', 'sans-serif'],
+                    },
+                    colors: {
+                        emerald: {
+                            50: '#ecfdf5',
+                            100: '#d1fae5',
+                            200: '#a7f3d0',
+                            500: '#10b981',
+                            600: '#059669',
+                            700: '#047857',
+                            800: '#065f46',
+                            900: '#064e3b',
+                        }
+                    }
+                }
+            }
+        };
+    </script>
+
+    <style>
+        /* Configuración base para experiencia táctil nativa tipo Android */
+        html, body {
+            font-family: 'Inter', system-ui, -apple-system, Roboto, sans-serif;
+            -webkit-tap-highlight-color: transparent;
+            overscroll-behavior-y: contain;
+        }
+
+        /* Micro-animación al incrementar/modificar contadores */
+        @keyframes popScale {
+            0% { transform: scale(1); }
+            40% { transform: scale(1.22); color: #059669; }
+            100% { transform: scale(1); }
+        }
+        .animate-pop {
+            animation: popScale 0.28s cubic-bezier(0.22, 1, 0.36, 1);
+        }
+
+        /* Destello suave en filas modificadas del Excel en Vivo */
+        @keyframes rowFlash {
+            0% { background-color: #bbf7d0; }
+            100% { background-color: transparent; }
+        }
+        .animate-row-flash {
+            animation: rowFlash 0.9s ease-out;
+        }
+
+        /* Animación de entrada de modales (Bottom Sheet en móvil) */
+        @keyframes slideUp {
+            from { transform: translateY(24px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+        .animate-sheet {
+            animation: slideUp 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        /* Scrollbar sutil para la tabla tipo Excel */
+        .excel-scroll::-webkit-scrollbar {
+            height: 6px;
+            width: 6px;
+        }
+        .excel-scroll::-webkit-scrollbar-track {
+            background: #f1f5f9;
+        }
+        .excel-scroll::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 9999px;
+        }
+
+        /* Efecto táctil suave tipo Material ripple */
+        .btn-tactile:active {
+            transform: scale(0.95);
+        }
+    </style>
+	<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#059669">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+</head>
+<body class="bg-slate-200/80 text-slate-800 min-h-screen flex justify-center sm:py-4">
+
+    <!-- Contenedor principal Mobile-First (marco estilo dispositivo Android en escritorio, pantalla completa en móvil) -->
+    <div id="appShell" class="w-full max-w-[480px] min-h-screen sm:min-h-[calc(100vh-2rem)] bg-slate-50 sm:rounded-[32px] sm:shadow-2xl sm:border sm:border-slate-300/70 flex flex-col relative overflow-x-clip">
+
+        <!-- =========================================================
+             BARRA SUPERIOR (APP BAR ESTILO MATERIAL 3)
+        ========================================================== -->
+        <header class="sticky top-0 z-30 bg-slate-900 text-white px-4 pt-3.5 pb-3 shadow-md sm:rounded-t-[30px]">
+            <div class="flex items-center justify-between gap-2">
+                <!-- Identidad + Estado en vivo -->
+                <div class="flex items-center gap-2.5 min-w-0">
+                    <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-emerald-400 to-emerald-600 flex items-center justify-center shadow-inner shrink-0">
+                        <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" stroke-width="2.4" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v12m-3-2.818l.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                        </svg>
+                    </div>
+                    <div class="min-w-0">
+                        <div class="flex items-center gap-2">
+                            <h1 class="text-base font-extrabold tracking-tight leading-none truncate">CajaViva</h1>
+                            <!-- Badge estado conexión -->
+                            <span id="liveStatusBadge" class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-amber-500/20 text-amber-300 border border-amber-400/30">
+                                <span id="liveStatusDot" class="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
+                                <span id="liveStatusText">Conectando...</span>
+                            </span>
+                        </div>
+                        <p id="headerShiftSubtitle" class="text-[11px] text-slate-400 truncate mt-0.5">Jornada de hoy</p>
+                    </div>
+                </div>
+
+                <!-- Chip Código de Sala + Botón Compartir -->
+                <button id="openRoomModalBtn" type="button" class="btn-tactile flex items-center gap-1.5 bg-slate-800 hover:bg-slate-700 active:bg-slate-700 border border-slate-700 rounded-xl px-2.5 py-2 transition shrink-0" title="Compartir o cambiar sala">
+                    <div class="text-left leading-tight">
+                        <span class="block text-[9px] uppercase tracking-wider text-slate-400 font-semibold">Sala</span>
+                        <span id="headerRoomCode" class="block text-xs font-extrabold tracking-widest text-emerald-400">------</span>
+                    </div>
+                    <svg class="w-4 h-4 text-slate-300 ml-0.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"/>
+                    </svg>
+                </button>
+            </div>
+        </header>
+
+        <!-- Banner Modo Solo Lectura (visible solo si espectador está activado) -->
+        <div id="spectatorBanner" class="hidden bg-indigo-600 text-white text-xs font-medium px-4 py-2 flex items-center justify-between gap-2">
+            <div class="flex items-center gap-2">
+                <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
+                </svg>
+                <span>Modo Solo Lectura activo (espectador)</span>
+            </div>
+            <button id="disableSpectatorQuickBtn" type="button" class="underline font-bold text-indigo-100 hover:text-white shrink-0">Desactivar</button>
+        </div>
+
+        <!-- =========================================================
+             CONTENIDO PRINCIPAL POR PESTAÑAS
+        ========================================================== -->
+        <main class="flex-1 pb-28 overflow-y-auto">
+
+            <!-- =====================================================
+                 PESTAÑA 1: VENTAS (REGISTRO EN VIVO)
+            ====================================================== -->
+            <section id="tab-ventas" class="p-4 space-y-4">
+
+                <!-- Tarjeta Resumen en Vivo -->
+                <div class="rounded-3xl bg-gradient-to-br from-slate-900 via-slate-800 to-emerald-950 text-white p-5 shadow-lg relative overflow-hidden">
+                    <!-- Adorno visual sutil -->
+                    <div class="absolute -right-8 -top-8 w-32 h-32 rounded-full bg-emerald-500/15 blur-xl pointer-events-none"></div>
+
+                    <div class="flex items-center justify-between">
+                        <span class="text-xs font-semibold uppercase tracking-wider text-emerald-300">Total Ganado en Vivo</span>
+                        <span id="summaryLastUpdate" class="text-[11px] text-slate-400">Actualizado ahora</span>
+                    </div>
+
+                    <div id="summaryTotalRevenue" class="text-4xl font-extrabold tracking-tight mt-1.5 text-white">$0</div>
+
+                    <div class="grid grid-cols-2 gap-3 mt-4 pt-3.5 border-t border-white/10">
+                        <div class="bg-white/5 rounded-2xl px-3.5 py-2.5 border border-white/10">
+                            <span class="block text-[11px] text-slate-300 font-medium">Total Vendidos</span>
+                            <div class="flex items-baseline gap-1 mt-0.5">
+                                <span id="summaryTotalUnits" class="text-xl font-bold text-emerald-300">0</span>
+                                <span class="text-xs text-slate-400">unid.</span>
+                            </div>
+                        </div>
+                        <div class="bg-white/5 rounded-2xl px-3.5 py-2.5 border border-white/10">
+                            <span class="block text-[11px] text-slate-300 font-medium">Productos Activos</span>
+                            <div class="flex items-baseline gap-1 mt-0.5">
+                                <span id="summaryProductCount" class="text-xl font-bold text-white">0</span>
+                                <span class="text-xs text-slate-400">ítems</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Encabezado de lista de productos -->
+                <div class="flex items-center justify-between px-1">
+                    <h2 class="text-sm font-bold text-slate-700 uppercase tracking-wide">Catálogo de Ventas</h2>
+                    <button id="shareQuickLinkBtn" type="button" class="text-xs font-semibold text-emerald-700 hover:text-emerald-800 flex items-center gap-1 py-1 px-2 rounded-lg hover:bg-emerald-50 transition">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/>
+                        </svg>
+                        Compartir en vivo
+                    </button>
+                </div>
+
+                <!-- Contenedor de tarjetas de productos -->
+                <div id="productsList" class="space-y-3"></div>
+
+                <!-- Estado vacío amigable -->
+                <div id="emptyProductsState" class="hidden bg-white rounded-3xl border border-dashed border-slate-300 p-7 text-center shadow-sm">
+                    <div class="w-16 h-16 mx-auto rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center mb-3.5">
+                        <svg class="w-8 h-8" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"/>
+                        </svg>
+                    </div>
+                    <h3 class="text-base font-bold text-slate-800">Aún no hay productos</h3>
+                    <p class="text-sm text-slate-500 mt-1 max-w-xs mx-auto">
+                        Agrega tus productos con su precio y registra cada venta con un toque. Todo se actualiza en vivo.
+                    </p>
+                    <div class="mt-5 flex flex-col gap-2.5">
+                        <button id="emptyAddProductBtn" type="button" class="btn-tactile w-full py-3 px-4 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-sm shadow-md shadow-emerald-600/20 flex items-center justify-center gap-2 transition">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2.4" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/>
+                            </svg>
+                            Agregar primer producto
+                        </button>
+                        <button id="loadSampleProductsBtn" type="button" class="btn-tactile w-full py-2.5 px-4 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs transition">
+                            Cargar productos de ejemplo
+                        </button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- =====================================================
+                 PESTAÑA 2: EXCEL EN VIVO (PLANILLA INTERACTIVA)
+            ====================================================== -->
+            <section id="tab-excel" class="hidden p-4 space-y-4">
+
+                <!-- Barra informativa estilo Excel -->
+                <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                    <div class="bg-emerald-700 text-white px-3.5 py-2.5 flex items-center justify-between gap-2">
+                        <div class="flex items-center gap-2 min-w-0">
+                            <div class="w-7 h-7 rounded-lg bg-white/15 flex items-center justify-center shrink-0">
+                                <svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M3 10h18M3 14h18m-9-4v8m-7 0h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/>
+                                </svg>
+                            </div>
+                            <div class="min-w-0">
+                                <h2 class="text-sm font-bold leading-tight truncate">Planilla en Tiempo Real</h2>
+                                <p id="excelFormulaBar" class="text-[11px] text-emerald-100 truncate">fx =SUMA(D2:D2) · Sincronización activa</p>
+                            </div>
+                        </div>
+                        <button id="excelQuickDownloadBtn" type="button" class="btn-tactile bg-white text-emerald-800 hover:bg-emerald-50 text-xs font-bold px-2.5 py-1.5 rounded-xl shadow-sm shrink-0 transition">
+                            .xlsx
+                        </button>
+                    </div>
+
+                    <!-- Cuadrícula estilo hoja de cálculo Excel -->
+                    <div class="overflow-x-auto excel-scroll">
+                        <table class="w-full border-collapse text-xs min-w-[430px]">
+                            <thead>
+                                <!-- Fila de letras de columna (A, B, C, D, E) -->
+                                <tr class="bg-slate-200 text-slate-600 font-bold text-[11px] select-none">
+                                    <th class="border border-slate-300 w-8 py-1 text-center bg-slate-200 sticky left-0 z-10"></th>
+                                    <th class="border border-slate-300 py-1 text-center">A</th>
+                                    <th class="border border-slate-300 py-1 text-center">B</th>
+                                    <th class="border border-slate-300 py-1 text-center">C</th>
+                                    <th class="border border-slate-300 py-1 text-center">D</th>
+                                    <th class="border border-slate-300 py-1 text-center">E</th>
+                                </tr>
+                                <!-- Fila 1: Encabezados de datos -->
+                                <tr class="bg-emerald-50 text-emerald-950 font-bold">
+                                    <td class="border border-slate-300 py-2 text-center bg-slate-200 text-slate-600 font-semibold sticky left-0 z-10">1</td>
+                                    <td class="border border-slate-300 px-2.5 py-2 text-left">Producto</td>
+                                    <td class="border border-slate-300 px-2 py-2 text-right whitespace-nowrap">Precio Unit.</td>
+                                    <td class="border border-slate-300 px-2 py-2 text-center whitespace-nowrap">Cant. Vendida</td>
+                                    <td class="border border-slate-300 px-2.5 py-2 text-right whitespace-nowrap">Subtotal ($)</td>
+                                    <td class="border border-slate-300 px-2 py-2 text-right whitespace-nowrap">% Ingreso</td>
+                                </tr>
+                            </thead>
+                            <tbody id="excelTableBody" class="bg-white divide-y divide-slate-200">
+                                <!-- Se llena dinámicamente -->
+                            </tbody>
+                            <tfoot>
+                                <!-- Fila final destacada en verde: TOTAL GENERAL -->
+                                <tr class="bg-emerald-600 text-white font-extrabold">
+                                    <td id="excelTotalRowNum" class="border border-emerald-700 py-2.5 text-center bg-emerald-800 text-emerald-100 sticky left-0 z-10">2</td>
+                                    <td class="border border-emerald-700 px-2.5 py-2.5 text-left uppercase tracking-wide" colspan="2">TOTAL GENERAL</td>
+                                    <td id="excelTotalUnits" class="border border-emerald-700 px-2 py-2.5 text-center">0</td>
+                                    <td id="excelTotalRevenue" class="border border-emerald-700 px-2.5 py-2.5 text-right whitespace-nowrap">$0</td>
+                                    <td id="excelTotalPercent" class="border border-emerald-700 px-2 py-2.5 text-right">100%</td>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Feed en vivo de los últimos 10 movimientos -->
+                <div class="bg-white rounded-3xl border border-slate-200 p-4 shadow-sm">
+                    <div class="flex items-center justify-between mb-3">
+                        <h3 class="text-sm font-bold text-slate-800 flex items-center gap-2">
+                            <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                            Últimos Movimientos en Vivo
+                        </h3>
+                        <span class="text-[11px] font-medium text-slate-400">Últimos 10</span>
+                    </div>
+                    <div id="liveActivityFeed" class="space-y-2">
+                        <!-- Movimientos dinámicos -->
+                    </div>
+                </div>
+            </section>
+
+            <!-- =====================================================
+                 PESTAÑA 3: CIERRE DE JORNADA Y EXPORTACIÓN EXCEL
+            ====================================================== -->
+            <section id="tab-cierre" class="hidden p-4 space-y-4">
+
+                <!-- Tarjeta de Resumen de Cierre -->
+                <div class="bg-white rounded-3xl border border-slate-200 p-5 shadow-sm space-y-4">
+                    <div class="flex items-start justify-between gap-2">
+                        <div>
+                            <span class="inline-block text-[11px] font-bold uppercase tracking-wider text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full">Resumen de Jornada</span>
+                            <p id="cierreDateLabel" class="text-xs text-slate-500 mt-1.5 font-medium"></p>
+                        </div>
+                        <span id="cierreRoomBadge" class="text-xs font-extrabold tracking-widest text-slate-600 bg-slate-100 px-2.5 py-1 rounded-xl border border-slate-200">------</span>
+                    </div>
+
+                    <!-- Nombre editable de la jornada -->
+                    <div>
+                        <label for="shiftNameInput" class="block text-xs font-semibold text-slate-600 mb-1">Nombre de la jornada / evento</label>
+                        <div class="flex gap-2">
+                            <input id="shiftNameInput" type="text" maxlength="50" placeholder="Ej: Feria Sábado, Turno Mañana..." class="flex-1 min-w-0 rounded-2xl border border-slate-300 bg-slate-50 px-3.5 py-2.5 text-sm font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition">
+                            <button id="saveShiftNameBtn" type="button" class="btn-tactile px-3.5 py-2.5 rounded-2xl bg-slate-900 text-white text-xs font-bold hover:bg-slate-800 transition shrink-0">Guardar</button>
+                        </div>
+                    </div>
+
+                    <!-- Métricas clave -->
+                    <div class="grid grid-cols-2 gap-3 pt-1">
+                        <div class="rounded-2xl bg-emerald-50 border border-emerald-200/70 p-3.5">
+                            <span class="text-[11px] font-semibold text-emerald-800 block">Total Ganado</span>
+                            <span id="cierreTotalRevenue" class="text-2xl font-extrabold text-emerald-700 block mt-0.5">$0</span>
+                        </div>
+                        <div class="rounded-2xl bg-slate-100 border border-slate-200 p-3.5">
+                            <span class="text-[11px] font-semibold text-slate-600 block">Unidades Vendidas</span>
+                            <span id="cierreTotalUnits" class="text-2xl font-extrabold text-slate-900 block mt-0.5">0</span>
+                        </div>
+                    </div>
+
+                    <!-- Producto Estrella -->
+                    <div class="rounded-2xl bg-amber-50 border border-amber-200/80 p-3.5 flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-xl bg-amber-400/25 text-amber-600 flex items-center justify-center shrink-0">
+                            <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+                                <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+                            </svg>
+                        </div>
+                        <div class="min-w-0 flex-1">
+                            <span class="text-[11px] font-bold uppercase tracking-wider text-amber-700 block">Producto estrella</span>
+                            <p id="cierreTopProduct" class="text-sm font-extrabold text-slate-800 truncate">Sin ventas registradas aún</p>
+                            <p id="cierreTopProductDetail" class="text-xs text-amber-800/80 truncate"></p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Botón Principal: Descargar Excel (.xlsx) -->
+                <div class="space-y-2.5">
+                    <button id="downloadXlsxBtn" type="button" class="btn-tactile w-full py-4 px-5 rounded-3xl bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-700 hover:to-emerald-800 text-white font-extrabold text-base shadow-lg shadow-emerald-600/30 flex items-center justify-center gap-3 transition">
+                        <svg class="w-6 h-6 shrink-0" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                        </svg>
+                        Descargar Excel (.xlsx)
+                    </button>
+                    <p class="text-[11px] text-center text-slate-500">
+                        Incluye hoja <strong>Resumen de Ventas</strong> con totales y hoja <strong>Movimientos</strong> con hora exacta.
+                    </p>
+                </div>
+
+                <!-- Acciones Secundarias -->
+                <div class="bg-white rounded-3xl border border-slate-200 p-4 shadow-sm space-y-2.5">
+                    <h3 class="text-xs font-bold uppercase tracking-wider text-slate-500 px-1 mb-1">Otras opciones de cierre</h3>
+
+                    <button id="copyWhatsAppBtn" type="button" class="btn-tactile w-full py-3 px-4 rounded-2xl bg-emerald-50 hover:bg-emerald-100 text-emerald-900 font-bold text-sm flex items-center justify-between transition border border-emerald-200/70">
+                        <span class="flex items-center gap-2.5">
+                            <svg class="w-5 h-5 text-emerald-600" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/>
+                            </svg>
+                            Copiar Resumen para WhatsApp
+                        </span>
+                        <svg class="w-4 h-4 text-emerald-600" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/>
+                        </svg>
+                    </button>
+
+                    <button id="downloadCsvBtn" type="button" class="btn-tactile w-full py-3 px-4 rounded-2xl bg-slate-100 hover:bg-slate-200/80 text-slate-800 font-bold text-sm flex items-center justify-between transition">
+                        <span class="flex items-center gap-2.5">
+                            <svg class="w-5 h-5 text-slate-600" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                            </svg>
+                            Descargar CSV (Respaldo)
+                        </span>
+                        <span class="text-xs font-semibold text-slate-500">.csv</span>
+                    </button>
+
+                    <button id="resetShiftBtn" type="button" class="btn-tactile w-full py-3 px-4 rounded-2xl bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold text-sm flex items-center justify-between transition border border-rose-200/70">
+                        <span class="flex items-center gap-2.5">
+                            <svg class="w-5 h-5 text-rose-600" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                            </svg>
+                            Reiniciar Contadores (Nueva Jornada)
+                        </span>
+                    </button>
+                </div>
+            </section>
+        </main>
+
+        <!-- =========================================================
+             BOTÓN FLOTANTE (FAB ANDROID) - SOLO EN PESTAÑA VENTAS
+        ========================================================== -->
+        <div id="fabContainer" class="fixed bottom-20 left-1/2 -translate-x-1/2 w-full max-w-[480px] pointer-events-none z-30 px-4 flex justify-end">
+            <button id="fabAddProductBtn" type="button" aria-label="Agregar nuevo producto" class="btn-tactile pointer-events-auto h-14 px-5 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm shadow-xl shadow-emerald-700/35 flex items-center gap-2 transition">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/>
+                </svg>
+                <span>Producto</span>
+            </button>
+        </div>
+
+        <!-- =========================================================
+             BARRA DE NAVEGACIÓN INFERIOR (MATERIAL 3)
+        ========================================================== -->
+        <nav class="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[480px] bg-white/95 backdrop-blur-md border-t border-slate-200 px-3 py-2 z-40 sm:rounded-b-[30px] shadow-[0_-4px_20px_rgba(15,23,42,0.06)]">
+            <div class="grid grid-cols-3 gap-1">
+                <!-- Tab 1: Ventas -->
+                <button type="button" data-tab="ventas" class="nav-tab-btn flex flex-col items-center justify-center py-1 rounded-2xl transition">
+                    <div class="nav-pill px-5 py-1 rounded-full transition bg-emerald-100 text-emerald-800">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z"/>
+                        </svg>
+                    </div>
+                    <span class="nav-label text-[11px] font-bold mt-0.5 text-emerald-800">Ventas</span>
+                </button>
+
+                <!-- Tab 2: Excel en Vivo -->
+                <button type="button" data-tab="excel" class="nav-tab-btn flex flex-col items-center justify-center py-1 rounded-2xl transition">
+                    <div class="nav-pill px-5 py-1 rounded-full transition bg-transparent text-slate-500">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M3 10h18M3 14h18m-9-4v8m-7 0h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/>
+                        </svg>
+                    </div>
+                    <span class="nav-label text-[11px] font-semibold mt-0.5 text-slate-500">Excel en Vivo</span>
+                </button>
+
+                <!-- Tab 3: Cierre -->
+                <button type="button" data-tab="cierre" class="nav-tab-btn flex flex-col items-center justify-center py-1 rounded-2xl transition">
+                    <div class="nav-pill px-5 py-1 rounded-full transition bg-transparent text-slate-500">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                        </svg>
+                    </div>
+                    <span class="nav-label text-[11px] font-semibold mt-0.5 text-slate-500">Cierre</span>
+                </button>
+            </div>
+        </nav>
+
+        <!-- =========================================================
+             NOTIFICACIÓN TOAST FLOTANTE
+        ========================================================== -->
+        <div id="toastContainer" class="fixed top-20 left-1/2 -translate-x-1/2 z-50 w-[calc(100%-2rem)] max-w-[420px] pointer-events-none flex flex-col items-center gap-2"></div>
+
+    </div>
+
+    <!-- =========================================================
+         MODAL 1: AGREGAR / EDITAR PRODUCTO
+    ========================================================== -->
+    <div id="productModal" class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4">
+        <div class="animate-sheet bg-white w-full max-w-[460px] rounded-t-3xl sm:rounded-3xl p-5 shadow-2xl space-y-4">
+            <div class="flex items-center justify-between">
+                <h3 id="productModalTitle" class="text-lg font-extrabold text-slate-900">Nuevo Producto</h3>
+                <button type="button" data-close-modal="productModal" class="p-2 rounded-full text-slate-400 hover:bg-slate-100 hover:text-slate-700 transition">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
+                    </svg>
+                </button>
+            </div>
+
+            <form id="productForm" class="space-y-4">
+                <input type="hidden" id="productEditId" value="">
+                <div>
+                    <label for="productNameInput" class="block text-xs font-bold text-slate-600 uppercase tracking-wide mb-1.5">Nombre del producto</label>
+                    <input id="productNameInput" type="text" required maxlength="45" placeholder="Ej: Empanada de Pino, Bebida Lata..." class="w-full rounded-2xl border border-slate-300 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white">
+                </div>
+
+                <div>
+                    <label for="productPriceInput" class="block text-xs font-bold text-slate-600 uppercase tracking-wide mb-1.5">Precio unitario ($)</label>
+                    <div class="relative">
+                        <span class="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold">$</span>
+                        <input id="productPriceInput" type="number" inputmode="numeric" min="0" step="1" required placeholder="2500" class="w-full rounded-2xl border border-slate-300 bg-slate-50 pl-8 pr-4 py-3 text-base font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white">
+                    </div>
+                </div>
+
+                <div class="flex gap-2.5 pt-2">
+                    <button type="button" data-close-modal="productModal" class="btn-tactile flex-1 py-3 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-sm transition">Cancelar</button>
+                    <button id="productSubmitBtn" type="submit" class="btn-tactile flex-1 py-3 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm shadow-md shadow-emerald-600/20 transition">Guardar Producto</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- =========================================================
+         MODAL 2: CANTIDAD EXACTA / AJUSTE RÁPIDO
+    ========================================================== -->
+    <div id="exactQtyModal" class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4">
+        <div class="animate-sheet bg-white w-full max-w-[420px] rounded-t-3xl sm:rounded-3xl p-5 shadow-2xl space-y-4">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h3 class="text-base font-extrabold text-slate-900">Ajustar Cantidad Vendida</h3>
+                    <p id="exactQtyProductName" class="text-xs font-semibold text-emerald-700 mt-0.5"></p>
+                </div>
+                <button type="button" data-close-modal="exactQtyModal" class="p-2 rounded-full text-slate-400 hover:bg-slate-100">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
+                    </svg>
+                </button>
+            </div>
+
+            <form id="exactQtyForm" class="space-y-4">
+                <input type="hidden" id="exactQtyProductId" value="">
+                <div>
+                    <label for="exactQtyInput" class="block text-xs font-bold text-slate-600 mb-1.5">Total vendido actual</label>
+                    <input id="exactQtyInput" type="number" inputmode="numeric" min="0" step="1" required class="w-full text-center text-3xl font-extrabold rounded-2xl border border-slate-300 bg-slate-50 py-3.5 text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white">
+                </div>
+
+                <!-- Botones de suma rápida dentro del modal -->
+                <div class="grid grid-cols-4 gap-2">
+                    <button type="button" data-quick-add="2" class="quick-add-modal-btn btn-tactile py-2 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-bold text-xs border border-emerald-200">+2</button>
+                    <button type="button" data-quick-add="5" class="quick-add-modal-btn btn-tactile py-2 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-bold text-xs border border-emerald-200">+5</button>
+                    <button type="button" data-quick-add="10" class="quick-add-modal-btn btn-tactile py-2 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-bold text-xs border border-emerald-200">+10</button>
+                    <button type="button" data-quick-add="20" class="quick-add-modal-btn btn-tactile py-2 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-bold text-xs border border-emerald-200">+20</button>
+                </div>
+
+                <div class="flex gap-2.5 pt-1">
+                    <button type="button" data-close-modal="exactQtyModal" class="btn-tactile flex-1 py-3 rounded-2xl bg-slate-100 text-slate-700 font-bold text-sm">Cancelar</button>
+                    <button type="submit" class="btn-tactile flex-1 py-3 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm shadow-md">Aplicar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- =========================================================
+         MODAL 3: COMPARTIR Y CAMBIAR SALA EN VIVO
+    ========================================================== -->
+    <div id="roomModal" class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4">
+        <div class="animate-sheet bg-white w-full max-w-[460px] max-h-[90vh] overflow-y-auto rounded-t-3xl sm:rounded-3xl p-5 shadow-2xl space-y-5">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h3 class="text-lg font-extrabold text-slate-900">Sala en Vivo</h3>
+                    <p class="text-xs text-slate-500">Comparte el total y la planilla en tiempo real</p>
+                </div>
+                <button type="button" data-close-modal="roomModal" class="p-2 rounded-full text-slate-400 hover:bg-slate-100">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
+                    </svg>
+                </button>
+            </div>
+
+            <!-- Bloque Código de Sala actual -->
+            <div class="rounded-2xl bg-slate-900 text-white p-4 text-center space-y-3">
+                <span class="text-[11px] font-semibold uppercase tracking-widest text-slate-400 block">Código de esta Sala</span>
+                <div id="modalRoomCodeDisplay" class="text-3xl font-extrabold tracking-[0.25em] text-emerald-400 select-all">------</div>
+
+                <div class="grid grid-cols-2 gap-2 pt-1">
+                    <button id="copyRoomCodeBtn" type="button" class="btn-tactile py-2.5 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-bold text-white flex items-center justify-center gap-1.5 transition">
+                        <svg class="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/>
+                        </svg>
+                        Copiar Código
+                    </button>
+                    <button id="copyRoomLinkBtn" type="button" class="btn-tactile py-2.5 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-xs font-bold text-white flex items-center justify-center gap-1.5 transition">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/>
+                        </svg>
+                        Copiar Enlace
+                    </button>
+                </div>
+            </div>
+
+            <!-- Interruptor Modo Solo Lectura -->
+            <div class="flex items-center justify-between gap-3 p-3.5 rounded-2xl bg-indigo-50 border border-indigo-200/70">
+                <div>
+                    <p class="text-sm font-bold text-indigo-950">Modo Solo Lectura (espectador)</p>
+                    <p class="text-xs text-indigo-700/80">Evita tocar botones por accidente al supervisar ventas.</p>
+                </div>
+                <label class="relative inline-flex items-center cursor-pointer shrink-0">
+                    <input id="spectatorToggle" type="checkbox" class="sr-only peer">
+                    <div class="w-11 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+                </label>
+            </div>
+
+            <!-- Unirse a otra Sala -->
+            <form id="joinRoomForm" class="space-y-2">
+                <label for="joinRoomCodeInput" class="block text-xs font-bold text-slate-600 uppercase tracking-wide">Unirse a la sala de otro usuario</label>
+                <div class="flex gap-2">
+                    <input id="joinRoomCodeInput" type="text" maxlength="6" placeholder="Ej: VNT482" class="flex-1 min-w-0 uppercase tracking-widest font-extrabold text-sm rounded-2xl border border-slate-300 bg-slate-50 px-4 py-3 text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white">
+                    <button type="submit" class="btn-tactile px-4 py-3 rounded-2xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold shrink-0 transition">Unirse</button>
+                </div>
+            </form>
+
+            <!-- Crear Nueva Sala -->
+            <div class="pt-1 border-t border-slate-100 flex flex-col gap-2">
+                <button id="createNewRoomBtn" type="button" class="btn-tactile w-full py-3 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs flex items-center justify-center gap-2 transition">
+                    <svg class="w-4 h-4 text-emerald-600" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/>
+                    </svg>
+                    Crear una Nueva Sala en Vivo
+                </button>
+
+                <!-- ID completo del dispositivo/usuario para trazabilidad multiusuario -->
+                <div class="text-[11px] text-slate-400 text-center break-all pt-1">
+                    ID de sesión: <span id="fullUserIdDisplay" class="font-mono text-slate-500">Iniciando...</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- =========================================================
+         MODAL 4: CONFIRMACIÓN PERSONALIZADA (SIN ALERT/CONFIRM)
+    ========================================================== -->
+    <div id="confirmModal" class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+        <div class="animate-sheet bg-white w-full max-w-[380px] rounded-3xl p-5 shadow-2xl space-y-4">
+            <div class="flex items-start gap-3">
+                <div id="confirmIconBox" class="w-10 h-10 rounded-2xl bg-rose-100 text-rose-600 flex items-center justify-center shrink-0">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+                    </svg>
+                </div>
+                <div>
+                    <h3 id="confirmModalTitle" class="text-base font-extrabold text-slate-900">¿Confirmar acción?</h3>
+                    <p id="confirmModalMessage" class="text-xs text-slate-600 mt-1 leading-relaxed"></p>
+                </div>
+            </div>
+            <div class="flex gap-2.5 pt-1">
+                <button id="confirmCancelBtn" type="button" class="btn-tactile flex-1 py-2.5 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-sm">Cancelar</button>
+                <button id="confirmAcceptBtn" type="button" class="btn-tactile flex-1 py-2.5 rounded-2xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-sm shadow-md">Confirmar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- =========================================================
+         LÓGICA PRINCIPAL + FIREBASE FIRESTORE EN TIEMPO REAL
+    ========================================================== -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import {
+            getAuth,
+            signInAnonymously,
+            signInWithCustomToken
+        } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import {
+            getFirestore,
+            doc,
+            getDoc,
+            setDoc,
+            onSnapshot,
+            runTransaction
+        } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        /* =========================================================
+  	 1. VARIABLES GLOBALES DE ENTORNO Y ESTADO DE LA APP
+  	 ========================================================= */
+	const appId = 'cajaviva';
+	const rawFirebaseConfig = JSON.stringify({
+    	apiKey: "AIzaSyAGbvZnWesQlwlyocwjh2qtsM6Le9hMU4Y",
+    	authDomain: "cajaviva.firebaseapp.com",
+   	 projectId: "cajaviva",
+    	storageBucket: "cajaviva.firebasestorage.app",
+   	 messagingSenderId: "164950725591",
+   	 appId: "1:164950725591:web:e2abff9aac8704e27d7192",
+   	 measurementId: "G-NC43EBJ245"
+	});
+	const initialAuthToken = null;
+
+        let db = null;
+        let auth = null;
+        let currentUser = null;
+        let roomUnsubscribe = null;
+        let isCloudSynced = false;
+
+        // Estado central en memoria (sincronizado automáticamente con Firestore)
+        const state = {
+            activeTab: 'ventas',
+            roomCode: '',
+            spectatorMode: false,
+            roomName: 'Jornada de Hoy',
+            createdDate: getTodayISO(),
+            products: [],      // [{ id, name, price, sold }]
+            activityLog: [],   // [{ id, productName, delta, price, totalImpact, timestamp }]
+            lastUpdated: Date.now(),
+            lastMutatedProductId: null
+        };
+
+        // Callback activo para modal de confirmación
+        let pendingConfirmAction = null;
+
+        /* =========================================================
+           2. UTILIDADES DE FORMATO, FECHA Y PORTAPAPELES
+        ========================================================= */
+
+        /**
+         * Formatea montos monetarios estilo chileno/latinoamericano ($12.500)
+         */
+        function formatCurrency(value) {
+            const num = Math.round(Number(value) || 0);
+            const absFormatted = Math.abs(num).toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+            return (num < 0 ? '-$' : '$') + absFormatted;
+        }
+
+        /**
+         * Devuelve fecha local en formato YYYY-MM-DD
+         */
+        function getTodayISO() {
+            const now = new Date();
+            const y = now.getFullYear();
+            const m = String(now.getMonth() + 1).padStart(2, '0');
+            const d = String(now.getDate()).padStart(2, '0');
+            return `${y}-${m}-${d}`;
+        }
+
+        /**
+         * Devuelve fecha legible en español (Ej: Lunes, 23 de noviembre de 2026)
+         */
+        function formatPrettyDate(isoStr) {
+            try {
+                const [y, m, d] = (isoStr || getTodayISO()).split('-').map(Number);
+                const dateObj = new Date(y, (m || 1) - 1, d || 1);
+                const formatted = dateObj.toLocaleDateString('es-CL', {
+                    weekday: 'long',
+                    year: 'numeric',
+                    month: 'long',
+                    day: 'numeric'
+                });
+                return formatted.charAt(0).toUpperCase() + formatted.slice(1);
+            } catch {
+                return getTodayISO();
+            }
+        }
+
+        /**
+         * Formatea hora corta HH:MM:SS para el feed de movimientos y Excel
+         */
+        function formatTime(ts) {
+            try {
+                return new Date(ts).toLocaleTimeString('es-CL', {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit'
+                });
+            } catch {
+                return '--:--';
+            }
+        }
+
+        /**
+         * Formatea fecha y hora completa para exportación Excel
+         */
+        function formatDateTime(ts) {
+            try {
+                return new Date(ts).toLocaleString('es-CL', {
+                    year: 'numeric',
+                    month: '2-digit',
+                    day: '2-digit',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit'
+                });
+            } catch {
+                return '';
+            }
+        }
+
+        /**
+         * Genera código de sala único de 6 caracteres en mayúsculas sin letras confusas
+         */
+        function generateRoomCode() {
+            const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+            let code = '';
+            for (let i = 0; i < 6; i++) {
+                code += chars.charAt(Math.floor(Math.random() * chars.length));
+            }
+            return code;
+        }
+
+        /**
+         * Genera identificador único corto para productos y movimientos
+         */
+        function generateId(prefix = 'id') {
+            return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
+        }
+
+        /**
+         * Escapa HTML para evitar inyección en textos ingresados por usuarios
+         */
+        function escapeHtml(str) {
+            return String(str ?? '')
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
+        /**
+         * Copia texto al portapapeles de forma segura incluso dentro de iframes
+         */
+        function copyTextToClipboard(text, successMsg = 'Copiado al portapapeles') {
+            try {
+                const textarea = document.createElement('textarea');
+                textarea.value = text;
+                textarea.setAttribute('readonly', '');
+                textarea.style.position = 'fixed';
+                textarea.style.top = '-9999px';
+                textarea.style.left = '-9999px';
+                document.body.appendChild(textarea);
+                textarea.select();
+                textarea.setSelectionRange(0, textarea.value.length);
+                const copied = document.execCommand('copy');
+                document.body.removeChild(textarea);
+                if (copied) {
+                    showToast(successMsg, 'success');
+                    return true;
+                }
+            } catch (err) {
+                console.error('Error al copiar:', err);
+            }
+            showToast('No se pudo copiar automáticamente', 'error');
+            return false;
+        }
+
+        /**
+         * Muestra notificación Toast estilo Android
+         */
+        function showToast(message, type = 'info') {
+            const container = document.getElementById('toastContainer');
+            if (!container) return;
+
+            const colors = {
+                success: 'bg-emerald-700 text-white border-emerald-500/40',
+                error: 'bg-rose-700 text-white border-rose-500/40',
+                warning: 'bg-amber-600 text-white border-amber-400/40',
+                info: 'bg-slate-900 text-white border-slate-700'
+            };
+
+            const toast = document.createElement('div');
+            toast.className = `pointer-events-auto px-4 py-2.5 rounded-2xl text-xs font-bold shadow-xl border flex items-center gap-2 transition-all duration-300 opacity-0 -translate-y-2 ${colors[type] || colors.info}`;
+            toast.textContent = message;
+
+            container.appendChild(toast);
+
+            // Animación de entrada
+            requestAnimationFrame(() => {
+                toast.classList.remove('opacity-0', '-translate-y-2');
+            });
+
+            // Desaparece tras 2.6 segundos
+            setTimeout(() => {
+                toast.classList.add('opacity-0', '-translate-y-2');
+                setTimeout(() => toast.remove(), 300);
+            }, 2600);
+        }
+
+        /**
+         * Abre modal de confirmación personalizado (reemplaza confirm())
+         */
+        function openConfirmModal({ title, message, acceptLabel = 'Confirmar', onConfirm }) {
+            document.getElementById('confirmModalTitle').textContent = title;
+            document.getElementById('confirmModalMessage').textContent = message;
+            document.getElementById('confirmAcceptBtn').textContent = acceptLabel;
+            pendingConfirmAction = onConfirm;
+            document.getElementById('confirmModal').classList.remove('hidden');
+        }
+
+        function closeConfirmModal() {
+            pendingConfirmAction = null;
+            document.getElementById('confirmModal').classList.add('hidden');
+        }
+
+        /* =========================================================
+           3. CONEXIÓN FIREBASE Y SINCRONIZACIÓN DE SALAS EN VIVO
+        ========================================================= */
+
+        /**
+         * Referencia estricta a la colección pública de salas en Firestore
+         * Ruta obligatoria: /artifacts/{appId}/public/data/sales_rooms/{roomCode}
+         */
+        function getRoomDocRef(roomCode) {
+            return doc(db, 'artifacts', appId, 'public', 'data', 'sales_rooms', roomCode);
+        }
+
+        /**
+         * Actualiza el indicador visual "En vivo" / "Modo local" en la barra superior
+         */
+        function updateConnectionBadge(status) {
+            const badge = document.getElementById('liveStatusBadge');
+            const dot = document.getElementById('liveStatusDot');
+            const text = document.getElementById('liveStatusText');
+
+            if (status === 'live') {
+                isCloudSynced = true;
+                badge.className = 'inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-500/20 text-emerald-300 border border-emerald-400/30';
+                dot.className = 'w-2 h-2 rounded-full bg-emerald-400 animate-pulse';
+                text.textContent = 'En vivo';
+            } else if (status === 'offline') {
+                isCloudSynced = false;
+                badge.className = 'inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-amber-500/20 text-amber-300 border border-amber-400/30';
+                dot.className = 'w-2 h-2 rounded-full bg-amber-400';
+                text.textContent = 'Modo local';
+            } else {
+                isCloudSynced = false;
+                badge.className = 'inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-slate-700 text-slate-300 border border-slate-600';
+                dot.className = 'w-2 h-2 rounded-full bg-slate-400 animate-pulse';
+                text.textContent = 'Conectando...';
+            }
+        }
+
+        /**
+         * Inicializa Firebase y autentica al usuario antes de cualquier consulta
+         */
+        async function initFirebase() {
+            // Determina sala inicial desde URL (?sala=CODE) o genera una nueva
+            const params = new URLSearchParams(window.location.search);
+            const urlRoom = (params.get('sala') || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6);
+            state.roomCode = urlRoom.length >= 4 ? urlRoom : generateRoomCode();
+            updateRoomCodeUI();
+
+            if (!rawFirebaseConfig) {
+                // Respaldo elegante si la app se abre sin configuración de nube
+                document.getElementById('fullUserIdDisplay').textContent = `local-${crypto.randomUUID()}`;
+                updateConnectionBadge('offline');
+                renderAll();
+                return;
+            }
+
+            try {
+                const firebaseConfig = typeof rawFirebaseConfig === 'string'
+                    ? JSON.parse(rawFirebaseConfig)
+                    : rawFirebaseConfig;
+
+                const app = initializeApp(firebaseConfig);
+                auth = getAuth(app);
+                db = getFirestore(app);
+
+                // REGLA 3: Autenticar primero con token personalizado o de forma anónima
+                if (initialAuthToken) {
+                    try {
+                        const cred = await signInWithCustomToken(auth, initialAuthToken);
+                        currentUser = cred.user;
+                    } catch (tokenErr) {
+                        console.warn('Fallback a autenticación anónima:', tokenErr);
+                        const cred = await signInAnonymously(auth);
+                        currentUser = cred.user;
+                    }
+                } else {
+                    const cred = await signInAnonymously(auth);
+                    currentUser = cred.user;
+                }
+
+                // Mostrar userId completo en el modal de sala
+                const uid = currentUser?.uid || crypto.randomUUID();
+                document.getElementById('fullUserIdDisplay').textContent = uid;
+
+                // Conectar a la sala en tiempo real
+                await connectToRoom(state.roomCode, { isInitial: true });
+            } catch (err) {
+                console.error('Error iniciando sincronización en vivo:', err);
+                document.getElementById('fullUserIdDisplay').textContent = `local-${crypto.randomUUID()}`;
+                updateConnectionBadge('offline');
+                showToast('Trabajando en modo local sin conexión en vivo', 'warning');
+                renderAll();
+            }
+        }
+
+        /**
+         * Conecta el listener onSnapshot a una sala específica y crea el documento si no existe
+         */
+        async function connectToRoom(roomCode, { isInitial = false, forceNew = false } = {}) {
+            const cleanCode = roomCode.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6);
+            if (!cleanCode) return;
+
+            // Cancelar suscripción anterior si existe
+            if (roomUnsubscribe) {
+                roomUnsubscribe();
+                roomUnsubscribe = null;
+            }
+
+            state.roomCode = cleanCode;
+            updateRoomCodeUI();
+
+            // Si no hay conexión Firestore activa, reinicia estado local para sala nueva
+            if (!db || !currentUser) {
+                if (forceNew) {
+                    state.roomName = 'Jornada de Hoy';
+                    state.createdDate = getTodayISO();
+                    state.products = [];
+                    state.activityLog = [];
+                }
+                renderAll();
+                return;
+            }
+
+            updateConnectionBadge('connecting');
+            const roomRef = getRoomDocRef(cleanCode);
+
+            try {
+                const snap = await getDoc(roomRef);
+                if (!snap.exists()) {
+                    // Inicializar sala nueva en Firestore
+                    const newRoomData = {
+                        roomCode: cleanCode,
+                        roomName: 'Jornada de Hoy',
+                        createdDate: getTodayISO(),
+                        products: [],
+                        activityLog: [],
+                        updatedAt: Date.now()
+                    };
+                    await setDoc(roomRef, newRoomData);
+                    if (!isInitial) {
+                        showToast(`Sala ${cleanCode} creada en vivo`, 'success');
+                    }
+                } else if (!isInitial) {
+                    showToast(`Conectado a la sala ${cleanCode}`, 'success');
+                }
+
+                // Suscripción en tiempo real con callback de error obligatorio
+                roomUnsubscribe = onSnapshot(
+                    roomRef,
+                    (docSnap) => {
+                        updateConnectionBadge('live');
+                        if (!docSnap.exists()) return;
+                        const data = docSnap.data();
+
+                        state.roomName = data.roomName || 'Jornada de Hoy';
+                        state.createdDate = data.createdDate || getTodayISO();
+                        state.products = Array.isArray(data.products) ? data.products : [];
+                        state.activityLog = Array.isArray(data.activityLog) ? data.activityLog : [];
+                        state.lastUpdated = data.updatedAt || Date.now();
+
+                        renderAll();
+                    },
+                    (error) => {
+                        console.error('Error en onSnapshot de sala:', error);
+                        updateConnectionBadge('offline');
+                        showToast('Se perdió la conexión en vivo. Trabajando en local.', 'warning');
+                    }
+                );
+            } catch (err) {
+                console.error('Error conectando a sala:', err);
+                updateConnectionBadge('offline');
+                showToast('No se pudo conectar a la sala en vivo', 'error');
+                renderAll();
+            }
+        }
+
+        /**
+         * Ejecuta una mutación atómica sobre la sala (usa runTransaction en Firestore para evitar pérdida de clics multiusuario)
+         */
+        async function mutateRoom(mutatorFn) {
+            if (state.spectatorMode) {
+                showToast('Modo Solo Lectura activo. Desactívalo para editar.', 'warning');
+                return false;
+            }
+
+            // Si no hay nube/autenticación, aplica cambio directamente en memoria local
+            if (!db || !currentUser) {
+                const draft = {
+                    roomCode: state.roomCode,
+                    roomName: state.roomName,
+                    createdDate: state.createdDate,
+                    products: structuredClone(state.products),
+                    activityLog: structuredClone(state.activityLog),
+                    updatedAt: Date.now()
+                };
+                const result = mutatorFn(draft);
+                if (result === false) return false;
+                state.roomName = draft.roomName;
+                state.products = draft.products;
+                state.activityLog = draft.activityLog;
+                state.lastUpdated = Date.now();
+                renderAll();
+                return true;
+            }
+
+            const roomRef = getRoomDocRef(state.roomCode);
+            try {
+                await runTransaction(db, async (transaction) => {
+                    const snap = await transaction.get(roomRef);
+                    const data = snap.exists()
+                        ? snap.data()
+                        : {
+                            roomCode: state.roomCode,
+                            roomName: state.roomName,
+                            createdDate: state.createdDate,
+                            products: [],
+                            activityLog: []
+                        };
+
+                    const draft = {
+                        roomCode: data.roomCode || state.roomCode,
+                        roomName: data.roomName || 'Jornada de Hoy',
+                        createdDate: data.createdDate || getTodayISO(),
+                        products: Array.isArray(data.products) ? data.products.map(p => ({ ...p })) : [],
+                        activityLog: Array.isArray(data.activityLog) ? [...data.activityLog] : [],
+                        updatedAt: Date.now()
+                    };
+
+                    const proceed = mutatorFn(draft);
+                    if (proceed === false) return;
+
+                    // Mantener máximo 150 movimientos recientes para documento ágil y liviano
+                    if (draft.activityLog.length > 150) {
+                        draft.activityLog = draft.activityLog.slice(0, 150);
+                    }
+                    draft.updatedAt = Date.now();
+                    transaction.set(roomRef, draft);
+                });
+                return true;
+            } catch (err) {
+                console.error('Error guardando cambio en Firestore:', err);
+                showToast('Error al sincronizar el cambio', 'error');
+                return false;
+            }
+        }
+
+        /* =========================================================
+           4. OPERACIONES DE NEGOCIO (PRODUCTOS, VENTAS, CIERRE)
+        ========================================================= */
+
+        /**
+         * Registra un incremento o decremento (+1, -1, +5, etc.) en un producto
+         */
+        async function adjustProductSold(productId, delta) {
+            if (!delta) return;
+            state.lastMutatedProductId = productId;
+
+            await mutateRoom((draft) => {
+                const prod = draft.products.find(p => p.id === productId);
+                if (!prod) return false;
+
+                const prevSold = Number(prod.sold) || 0;
+                const nextSold = Math.max(0, prevSold + delta);
+                const appliedDelta = nextSold - prevSold;
+                if (appliedDelta === 0) return false;
+
+                prod.sold = nextSold;
+
+                draft.activityLog.unshift({
+                    id: generateId('mov'),
+                    productId: prod.id,
+                    productName: prod.name,
+                    delta: appliedDelta,
+                    price: Number(prod.price) || 0,
+                    totalImpact: appliedDelta * (Number(prod.price) || 0),
+                    timestamp: Date.now()
+                });
+                return true;
+            });
+        }
+
+        /**
+         * Define una cantidad exacta para un producto registrando la diferencia en movimientos
+         */
+        async function setProductExactSold(productId, targetQty) {
+            const cleanQty = Math.max(0, Math.floor(Number(targetQty) || 0));
+            state.lastMutatedProductId = productId;
+
+            await mutateRoom((draft) => {
+                const prod = draft.products.find(p => p.id === productId);
+                if (!prod) return false;
+
+                const prevSold = Number(prod.sold) || 0;
+                const appliedDelta = cleanQty - prevSold;
+                if (appliedDelta === 0) return false;
+
+                prod.sold = cleanQty;
+                draft.activityLog.unshift({
+                    id: generateId('mov'),
+                    productId: prod.id,
+                    productName: prod.name,
+                    delta: appliedDelta,
+                    price: Number(prod.price) || 0,
+                    totalImpact: appliedDelta * (Number(prod.price) || 0),
+                    timestamp: Date.now()
+                });
+                return true;
+            });
+            showToast('Cantidad actualizada', 'success');
+        }
+
+        /**
+         * Agrega un producto nuevo o edita uno existente
+         */
+        async function saveProduct({ id, name, price }) {
+            const cleanName = name.trim();
+            const cleanPrice = Math.max(0, Math.round(Number(price) || 0));
+            if (!cleanName) return;
+
+            const isEditing = Boolean(id);
+            const ok = await mutateRoom((draft) => {
+                if (isEditing) {
+                    const existing = draft.products.find(p => p.id === id);
+                    if (!existing) return false;
+                    existing.name = cleanName;
+                    existing.price = cleanPrice;
+                } else {
+                    draft.products.push({
+                        id: generateId('prd'),
+                        name: cleanName,
+                        price: cleanPrice,
+                        sold: 0
+                    });
+                }
+                return true;
+            });
+
+            if (ok) {
+                showToast(isEditing ? 'Producto actualizado' : `"${cleanName}" agregado`, 'success');
+            }
+        }
+
+        /**
+         * Elimina un producto del catálogo
+         */
+        async function deleteProduct(productId) {
+            const ok = await mutateRoom((draft) => {
+                draft.products = draft.products.filter(p => p.id !== productId);
+                return true;
+            });
+            if (ok) showToast('Producto eliminado', 'info');
+        }
+
+        /**
+         * Carga productos de ejemplo chilenos/latinoamericanos para probar rápidamente
+         */
+        async function loadSampleProducts() {
+            const samples = [
+                { id: generateId('prd'), name: 'Empanada de Pino', price: 2500, sold: 0 },
+                { id: generateId('prd'), name: 'Bebida Lata 350ml', price: 1500, sold: 0 },
+                { id: generateId('prd'), name: 'Café Expreso', price: 2000, sold: 0 },
+                { id: generateId('prd'), name: 'Sándwich Ave Palta', price: 4200, sold: 0 },
+                { id: generateId('prd'), name: 'Agua Mineral 500ml', price: 1200, sold: 0 }
+            ];
+
+            const ok = await mutateRoom((draft) => {
+                draft.products.push(...samples);
+                return true;
+            });
+            if (ok) showToast('Productos de ejemplo cargados', 'success');
+        }
+
+        /**
+         * Actualiza el nombre de la jornada en Firestore
+         */
+        async function saveShiftName(newName) {
+            const clean = newName.trim() || 'Jornada de Hoy';
+            const ok = await mutateRoom((draft) => {
+                draft.roomName = clean;
+                return true;
+            });
+            if (ok) showToast('Nombre de jornada guardado', 'success');
+        }
+
+        /**
+         * Reinicia todos los contadores de ventas a 0 manteniendo el catálogo de productos
+         */
+        async function resetShiftCounters() {
+            const ok = await mutateRoom((draft) => {
+                draft.products = draft.products.map(p => ({ ...p, sold: 0 }));
+                draft.activityLog = [];
+                draft.createdDate = getTodayISO();
+                return true;
+            });
+            if (ok) showToast('Contadores reiniciados para nueva jornada', 'success');
+        }
+
+        /* =========================================================
+           5. CÁLCULO DE TOTALES Y ESTADÍSTICAS
+        ========================================================= */
+        function computeMetrics() {
+            let totalUnits = 0;
+            let totalRevenue = 0;
+            let topProduct = null;
+
+            for (const p of state.products) {
+                const qty = Number(p.sold) || 0;
+                const price = Number(p.price) || 0;
+                const subtotal = qty * price;
+                totalUnits += qty;
+                totalRevenue += subtotal;
+
+                if (qty > 0) {
+                    if (!topProduct || subtotal > topProduct.subtotal || (subtotal === topProduct.subtotal && qty > topProduct.sold)) {
+                        topProduct = { ...p, sold: qty, price, subtotal };
+                    }
+                }
+            }
+
+            return {
+                totalUnits,
+                totalRevenue,
+                productCount: state.products.length,
+                topProduct
+            };
+        }
+
+        /* =========================================================
+           6. RENDERIZADO DE INTERFAZ (3 PESTAÑAS)
+        ========================================================= */
+
+        function updateRoomCodeUI() {
+            document.getElementById('headerRoomCode').textContent = state.roomCode;
+            document.getElementById('modalRoomCodeDisplay').textContent = state.roomCode;
+            document.getElementById('cierreRoomBadge').textContent = `SALA ${state.roomCode}`;
+
+            // Actualizar URL sin recargar página para compartir fácilmente
+            try {
+                const url = new URL(window.location.href);
+                url.searchParams.set('sala', state.roomCode);
+                window.history.replaceState({}, '', url.toString());
+            } catch {
+                // Ignorar si el entorno restringe history.replaceState
+            }
+        }
+
+        function renderAll() {
+            const metrics = computeMetrics();
+            renderHeaderAndSpectator();
+            renderVentasTab(metrics);
+            renderExcelTab(metrics);
+            renderCierreTab(metrics);
+
+            // Limpiar identificador de última mutación después de renderizar animaciones
+            setTimeout(() => {
+                state.lastMutatedProductId = null;
+            }, 350);
+        }
+
+        function renderHeaderAndSpectator() {
+            document.getElementById('headerShiftSubtitle').textContent = state.roomName;
+            const spectatorBanner = document.getElementById('spectatorBanner');
+            const fabContainer = document.getElementById('fabContainer');
+            const spectatorToggle = document.getElementById('spectatorToggle');
+
+            spectatorToggle.checked = state.spectatorMode;
+
+            if (state.spectatorMode) {
+                spectatorBanner.classList.remove('hidden');
+            } else {
+                spectatorBanner.classList.add('hidden');
+            }
+
+            // Mostrar FAB únicamente en pestaña "Ventas" y cuando no esté en modo espectador
+            if (state.activeTab === 'ventas' && !state.spectatorMode) {
+                fabContainer.classList.remove('hidden');
+            } else {
+                fabContainer.classList.add('hidden');
+            }
+        }
+
+        /**
+         * Renderiza Pestaña 1: Ventas
+         */
+        function renderVentasTab(metrics) {
+            const revEl = document.getElementById('summaryTotalRevenue');
+            const unitsEl = document.getElementById('summaryTotalUnits');
+
+            revEl.textContent = formatCurrency(metrics.totalRevenue);
+            unitsEl.textContent = metrics.totalUnits.toLocaleString('es-CL');
+            document.getElementById('summaryProductCount').textContent = metrics.productCount;
+            document.getElementById('summaryLastUpdate').textContent = `Act. ${formatTime(state.lastUpdated)}`;
+
+            const listEl = document.getElementById('productsList');
+            const emptyEl = document.getElementById('emptyProductsState');
+
+            if (state.products.length === 0) {
+                listEl.innerHTML = '';
+                emptyEl.classList.remove('hidden');
+                // Deshabilitar botones de creación si está en modo espectador
+                document.getElementById('emptyAddProductBtn').disabled = state.spectatorMode;
+                document.getElementById('loadSampleProductsBtn').disabled = state.spectatorMode;
+                return;
+            }
+
+            emptyEl.classList.add('hidden');
+
+            const isReadOnly = state.spectatorMode;
+
+            listEl.innerHTML = state.products.map((prod) => {
+                const qty = Number(prod.sold) || 0;
+                const price = Number(prod.price) || 0;
+                const subtotal = qty * price;
+                const popClass = state.lastMutatedProductId === prod.id ? 'animate-pop' : '';
+
+                return `
+                    <article class="bg-white rounded-3xl border border-slate-200/90 p-4 shadow-sm transition hover:border-emerald-200">
+                        <!-- Fila superior: Nombre, precio unitario y acciones -->
+                        <div class="flex items-start justify-between gap-2">
+                            <div class="min-w-0 flex-1">
+                                <h3 class="text-base font-bold text-slate-900 leading-snug truncate">${escapeHtml(prod.name)}</h3>
+                                <div class="flex items-center flex-wrap gap-x-2 gap-y-0.5 mt-0.5">
+                                    <span class="text-xs font-semibold text-slate-500">${formatCurrency(price)} c/u</span>
+                                    <span class="text-slate-300">•</span>
+                                    <span class="text-xs font-extrabold text-emerald-700">Subtotal: ${formatCurrency(subtotal)}</span>
+                                </div>
+                            </div>
+
+                            ${!isReadOnly ? `
+                            <div class="flex items-center gap-1 shrink-0">
+                                <button type="button" data-action="edit" data-id="${prod.id}" aria-label="Editar producto" class="btn-tactile p-2 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+                                    </svg>
+                                </button>
+                                <button type="button" data-action="delete" data-id="${prod.id}" aria-label="Eliminar producto" class="btn-tactile p-2 rounded-xl text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                                    </svg>
+                                </button>
+                            </div>` : ''}
+                        </div>
+
+                        <!-- Fila inferior: Controles táctiles de contador (-, cantidad exacta, +, +5) -->
+                        <div class="mt-3.5 flex items-center justify-between gap-2 bg-slate-50 rounded-2xl p-1.5 border border-slate-200/70">
+                            <button type="button" data-action="dec" data-id="${prod.id}" ${isReadOnly || qty <= 0 ? 'disabled' : ''} aria-label="Restar uno" class="btn-tactile w-12 h-12 rounded-xl flex items-center justify-center font-extrabold text-xl transition ${isReadOnly || qty <= 0 ? 'bg-slate-200/70 text-slate-400 cursor-not-allowed' : 'bg-white text-slate-700 border border-slate-200 shadow-xs hover:bg-rose-50 hover:text-rose-600 hover:border-rose-200'}">
+                                −
+                            </button>
+
+                            <button type="button" data-action="exact" data-id="${prod.id}" ${isReadOnly ? 'disabled' : ''} title="Toca para ingresar cantidad exacta" class="flex-1 h-12 rounded-xl flex flex-col items-center justify-center transition ${isReadOnly ? 'cursor-default' : 'hover:bg-white'}">
+                                <span class="text-2xl font-extrabold text-slate-900 leading-none ${popClass}">${qty}</span>
+                                <span class="text-[10px] font-semibold text-slate-400 mt-0.5">${isReadOnly ? 'vendidos' : 'tocar para editar'}</span>
+                            </button>
+
+                            <div class="flex items-center gap-1.5">
+                                ${!isReadOnly ? `
+                                <button type="button" data-action="add5" data-id="${prod.id}" aria-label="Sumar cinco" class="btn-tactile h-12 px-3 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 font-extrabold text-xs transition">
+                                    +5
+                                </button>` : ''}
+                                <button type="button" data-action="inc" data-id="${prod.id}" ${isReadOnly ? 'disabled' : ''} aria-label="Sumar uno" class="btn-tactile w-14 h-12 rounded-xl flex items-center justify-center font-extrabold text-2xl transition ${isReadOnly ? 'bg-slate-200 text-slate-400 cursor-not-allowed' : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-md shadow-emerald-600/25'}">
+                                    +
+                                </button>
+                            </div>
+                        </div>
+                    </article>
+                `;
+            }).join('');
+        }
+
+        /**
+         * Renderiza Pestaña 2: Excel en Vivo
+         */
+        function renderExcelTab(metrics) {
+            const tbody = document.getElementById('excelTableBody');
+            const totalRowNumEl = document.getElementById('excelTotalRowNum');
+            const formulaBar = document.getElementById('excelFormulaBar');
+
+            if (state.products.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td class="border border-slate-300 py-4 text-center bg-slate-200 text-slate-600 font-semibold sticky left-0">2</td>
+                        <td colspan="5" class="border border-slate-300 py-6 text-center text-slate-400 italic">
+                            Agrega productos en la pestaña "Ventas" para verlos aquí en vivo.
+                        </td>
+                    </tr>
+                `;
+                totalRowNumEl.textContent = '3';
+                formulaBar.textContent = 'fx =SUMA(D2:D2) · Sin filas de datos aún';
+            } else {
+                const lastRow = state.products.length + 1;
+                formulaBar.textContent = `fx =SUMA(D2:D${lastRow}) · Actualización en tiempo real`;
+                totalRowNumEl.textContent = String(lastRow + 1);
+
+                tbody.innerHTML = state.products.map((prod, idx) => {
+                    const rowNumber = idx + 2;
+                    const qty = Number(prod.sold) || 0;
+                    const price = Number(prod.price) || 0;
+                    const subtotal = qty * price;
+                    const pct = metrics.totalRevenue > 0
+                        ? ((subtotal / metrics.totalRevenue) * 100).toFixed(1)
+                        : '0.0';
+                    const flashClass = state.lastMutatedProductId === prod.id ? 'animate-row-flash' : '';
+
+                    return `
+                        <tr class="hover:bg-emerald-50/40 transition-colors ${flashClass}">
+                            <td class="border border-slate-300 py-2 text-center bg-slate-100 text-slate-500 font-semibold sticky left-0 z-10">${rowNumber}</td>
+                            <td class="border border-slate-300 px-2.5 py-2 font-semibold text-slate-800 max-w-[140px] truncate">${escapeHtml(prod.name)}</td>
+                            <td class="border border-slate-300 px-2 py-2 text-right text-slate-600 whitespace-nowrap">${formatCurrency(price)}</td>
+                            <td class="border border-slate-300 px-2 py-2 text-center font-bold ${qty > 0 ? 'text-emerald-700 bg-emerald-50/50' : 'text-slate-400'}">${qty}</td>
+                            <td class="border border-slate-300 px-2.5 py-2 text-right font-bold text-slate-900 whitespace-nowrap">${formatCurrency(subtotal)}</td>
+                            <td class="border border-slate-300 px-2 py-2 text-right text-slate-600 whitespace-nowrap">${pct}%</td>
+                        </tr>
+                    `;
+                }).join('');
+            }
+
+            document.getElementById('excelTotalUnits').textContent = metrics.totalUnits.toLocaleString('es-CL');
+            document.getElementById('excelTotalRevenue').textContent = formatCurrency(metrics.totalRevenue);
+            document.getElementById('excelTotalPercent').textContent = metrics.totalRevenue > 0 ? '100%' : '0%';
+
+            // Renderizar los últimos 10 movimientos en vivo
+            const feedEl = document.getElementById('liveActivityFeed');
+            const latestMoves = state.activityLog.slice(0, 10);
+
+            if (latestMoves.length === 0) {
+                feedEl.innerHTML = `<p class="text-xs text-slate-400 text-center py-4">Aún no se han registrado movimientos en esta jornada.</p>`;
+            } else {
+                feedEl.innerHTML = latestMoves.map((mov) => {
+                    const isPositive = mov.delta >= 0;
+                    const sign = isPositive ? '+' : '';
+                    const badgeStyle = isPositive
+                        ? 'bg-emerald-100 text-emerald-800'
+                        : 'bg-rose-100 text-rose-700';
+
+                    return `
+                        <div class="flex items-center justify-between gap-2 py-2 px-3 rounded-2xl bg-slate-50 border border-slate-100">
+                            <div class="flex items-center gap-2.5 min-w-0">
+                                <span class="px-2 py-1 rounded-lg text-xs font-extrabold shrink-0 ${badgeStyle}">${sign}${mov.delta}</span>
+                                <div class="min-w-0">
+                                    <p class="text-xs font-bold text-slate-800 truncate">${escapeHtml(mov.productName)}</p>
+                                    <p class="text-[11px] text-slate-400">${formatTime(mov.timestamp)}</p>
+                                </div>
+                            </div>
+                            <span class="text-xs font-extrabold whitespace-nowrap ${isPositive ? 'text-emerald-700' : 'text-rose-600'}">
+                                ${isPositive ? '+' : ''}${formatCurrency(mov.totalImpact)}
+                            </span>
+                        </div>
+                    `;
+                }).join('');
+            }
+        }
+
+        /**
+         * Renderiza Pestaña 3: Cierre de Jornada
+         */
+        function renderCierreTab(metrics) {
+            document.getElementById('cierreDateLabel').textContent = formatPrettyDate(state.createdDate);
+            document.getElementById('cierreTotalRevenue').textContent = formatCurrency(metrics.totalRevenue);
+            document.getElementById('cierreTotalUnits').textContent = metrics.totalUnits.toLocaleString('es-CL');
+
+            // Sincronizar input nombre de jornada solo si el usuario no está escribiendo en él
+            const shiftInput = document.getElementById('shiftNameInput');
+            if (document.activeElement !== shiftInput) {
+                shiftInput.value = state.roomName;
+            }
+            shiftInput.disabled = state.spectatorMode;
+            document.getElementById('saveShiftNameBtn').disabled = state.spectatorMode;
+            document.getElementById('resetShiftBtn').disabled = state.spectatorMode;
+
+            const topNameEl = document.getElementById('cierreTopProduct');
+            const topDetailEl = document.getElementById('cierreTopProductDetail');
+            if (metrics.topProduct) {
+                topNameEl.textContent = metrics.topProduct.name;
+                topDetailEl.textContent = `${metrics.topProduct.sold} vendidos · ${formatCurrency(metrics.topProduct.subtotal)} ganados`;
+            } else {
+                topNameEl.textContent = 'Sin ventas registradas aún';
+                topDetailEl.textContent = 'Registra tu primera venta para ver el destacado';
+            }
+        }
+
+        /* =========================================================
+           7. EXPORTACIÓN A EXCEL (.XLSX), CSV Y RESUMEN WHATSAPP
+        ========================================================= */
+
+        /**
+         * Genera y descarga el archivo Excel real (.xlsx) con 2 hojas usando SheetJS
+         */
+        function exportToExcel() {
+            if (typeof XLSX === 'undefined') {
+                showToast('Librería Excel no disponible sin internet. Usa Descargar CSV.', 'warning');
+                return;
+            }
+
+            try {
+                const metrics = computeMetrics();
+                const wb = XLSX.utils.book_new();
+
+                // --- HOJA 1: Resumen de Ventas ---
+                const summaryRows = [
+                    ['CAJAVIVA - REPORTE DE CIERRE DE VENTAS'],
+                    ['Jornada:', state.roomName, 'Sala:', state.roomCode],
+                    ['Fecha:', formatPrettyDate(state.createdDate), 'Generado:', formatDateTime(Date.now())],
+                    [],
+                    ['Producto', 'Precio Unitario', 'Cantidad Vendida', 'Total Ganado']
+                ];
+
+                state.products.forEach((p) => {
+                    const price = Number(p.price) || 0;
+                    const sold = Number(p.sold) || 0;
+                    summaryRows.push([p.name, price, sold, price * sold]);
+                });
+
+                summaryRows.push([]);
+                summaryRows.push([
+                    'TOTAL VENDIDO Y TOTAL GANADO',
+                    '',
+                    metrics.totalUnits,
+                    metrics.totalRevenue
+                ]);
+
+                const wsSummary = XLSX.utils.aoa_to_sheet(summaryRows);
+                wsSummary['!cols'] = [
+                    { wch: 30 },
+                    { wch: 18 },
+                    { wch: 18 },
+                    { wch: 20 }
+                ];
+                XLSX.utils.book_append_sheet(wb, wsSummary, 'Resumen de Ventas');
+
+                // --- HOJA 2: Movimientos ---
+                const movesRows = [
+                    ['Fecha y Hora', 'Producto', 'Movimiento (Unid.)', 'Precio Unitario', 'Impacto ($)']
+                ];
+
+                // Orden cronológico en el reporte exportado
+                const chronologicalMoves = [...state.activityLog].reverse();
+                if (chronologicalMoves.length === 0) {
+                    movesRows.push(['Sin movimientos registrados durante la jornada', '', '', '', '']);
+                } else {
+                    chronologicalMoves.forEach((m) => {
+                        movesRows.push([
+                            formatDateTime(m.timestamp),
+                            m.productName,
+                            m.delta,
+                            Number(m.price) || 0,
+                            Number(m.totalImpact) || 0
+                        ]);
+                    });
+                }
+
+                const wsMoves = XLSX.utils.aoa_to_sheet(movesRows);
+                wsMoves['!cols'] = [
+                    { wch: 22 },
+                    { wch: 28 },
+                    { wch: 18 },
+                    { wch: 16 },
+                    { wch: 16 }
+                ];
+                XLSX.utils.book_append_sheet(wb, wsMoves, 'Movimientos');
+
+                // Nombre de archivo solicitado: Ventas_YYYY-MM-DD_CodigoSala.xlsx
+                const filename = `Ventas_${state.createdDate || getTodayISO()}_${state.roomCode}.xlsx`;
+                XLSX.writeFile(wb, filename);
+                showToast(`Excel descargado: ${filename}`, 'success');
+            } catch (err) {
+                console.error('Error exportando Excel:', err);
+                showToast('Ocurrió un error al generar el Excel', 'error');
+            }
+        }
+
+        /**
+         * Genera y descarga respaldo en CSV (UTF-8 con BOM para acentos en Excel)
+         */
+        function exportToCsv() {
+            try {
+                const metrics = computeMetrics();
+                const escapeCsv = (val) => `"${String(val ?? '').replace(/"/g, '""')}"`;
+
+                const lines = [
+                    ['Producto', 'Precio Unitario', 'Cantidad Vendida', 'Total Ganado'].map(escapeCsv).join(';'),
+                    ...state.products.map((p) => {
+                        const price = Number(p.price) || 0;
+                        const sold = Number(p.sold) || 0;
+                        return [p.name, price, sold, price * sold].map(escapeCsv).join(';');
+                    }),
+                    ['TOTAL GENERAL', '', metrics.totalUnits, metrics.totalRevenue].map(escapeCsv).join(';')
+                ];
+
+                const blob = new Blob(['\uFEFF' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                const filename = `Ventas_${state.createdDate || getTodayISO()}_${state.roomCode}.csv`;
+                a.href = url;
+                a.download = filename;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+                showToast(`CSV descargado: ${filename}`, 'success');
+            } catch (err) {
+                console.error('Error exportando CSV:', err);
+                showToast('No se pudo descargar el archivo CSV', 'error');
+            }
+        }
+
+        /**
+         * Construye y copia un resumen limpio y listo para pegar en WhatsApp
+         */
+        function copyWhatsAppSummary() {
+            const metrics = computeMetrics();
+            const lines = [
+                `📊 *CIERRE DE VENTAS - ${state.roomName.toUpperCase()}*`,
+                `📅 ${formatPrettyDate(state.createdDate)}`,
+                `🔑 Sala: ${state.roomCode}`,
+                `━━━━━━━━━━━━━━━━━━`,
+                `💰 *Total Ganado:* ${formatCurrency(metrics.totalRevenue)}`,
+                `📦 *Total Vendidos:* ${metrics.totalUnits} unidades`,
+                metrics.topProduct
+                    ? `⭐ *Producto estrella:* ${metrics.topProduct.name} (${metrics.topProduct.sold} u.)`
+                    : `⭐ *Producto estrella:* Sin ventas`,
+                `━━━━━━━━━━━━━━━━━━`,
+                `📋 *Detalle por producto:*`
+            ];
+
+            if (state.products.length === 0) {
+                lines.push('• Sin productos registrados');
+            } else {
+                state.products.forEach((p) => {
+                    const qty = Number(p.sold) || 0;
+                    const sub = qty * (Number(p.price) || 0);
+                    lines.push(`• ${p.name}: ${qty} u. (${formatCurrency(sub)})`);
+                });
+            }
+
+            copyTextToClipboard(lines.join('\n'), 'Resumen copiado listo para WhatsApp');
+        }
+
+        /* =========================================================
+           8. NAVEGACIÓN ENTRE PESTAÑAS Y MODALES
+        ========================================================= */
+
+        function switchTab(tabName) {
+            state.activeTab = tabName;
+
+            ['ventas', 'excel', 'cierre'].forEach((t) => {
+                const sec = document.getElementById(`tab-${t}`);
+                if (sec) sec.classList.toggle('hidden', t !== tabName);
+            });
+
+            document.querySelectorAll('.nav-tab-btn').forEach((btn) => {
+                const isActive = btn.dataset.tab === tabName;
+                const pill = btn.querySelector('.nav-pill');
+                const label = btn.querySelector('.nav-label');
+
+                if (isActive) {
+                    pill.className = 'nav-pill px-5 py-1 rounded-full transition bg-emerald-100 text-emerald-800';
+                    label.className = 'nav-label text-[11px] font-bold mt-0.5 text-emerald-800';
+                } else {
+                    pill.className = 'nav-pill px-5 py-1 rounded-full transition bg-transparent text-slate-500';
+                    label.className = 'nav-label text-[11px] font-semibold mt-0.5 text-slate-500';
+                }
+            });
+
+            renderHeaderAndSpectator();
+        }
+
+        function openProductModal(productToEdit = null) {
+            if (state.spectatorMode) {
+                showToast('Modo Solo Lectura activo', 'warning');
+                return;
+            }
+            const titleEl = document.getElementById('productModalTitle');
+            const submitEl = document.getElementById('productSubmitBtn');
+            const idInput = document.getElementById('productEditId');
+            const nameInput = document.getElementById('productNameInput');
+            const priceInput = document.getElementById('productPriceInput');
+
+            if (productToEdit) {
+                titleEl.textContent = 'Editar Producto';
+                submitEl.textContent = 'Guardar Cambios';
+                idInput.value = productToEdit.id;
+                nameInput.value = productToEdit.name;
+                priceInput.value = productToEdit.price;
+            } else {
+                titleEl.textContent = 'Nuevo Producto';
+                submitEl.textContent = 'Agregar Producto';
+                idInput.value = '';
+                nameInput.value = '';
+                priceInput.value = '';
+            }
+
+            document.getElementById('productModal').classList.remove('hidden');
+            setTimeout(() => nameInput.focus(), 60);
+        }
+
+        function openExactQtyModal(product) {
+            if (state.spectatorMode || !product) return;
+            document.getElementById('exactQtyProductId').value = product.id;
+            document.getElementById('exactQtyProductName').textContent = `${product.name} (${formatCurrency(product.price)} c/u)`;
+            const qtyInput = document.getElementById('exactQtyInput');
+            qtyInput.value = Number(product.sold) || 0;
+            document.getElementById('exactQtyModal').classList.remove('hidden');
+            setTimeout(() => {
+                qtyInput.focus();
+                qtyInput.select();
+            }, 60);
+        }
+
+        function closeModal(modalId) {
+            const el = document.getElementById(modalId);
+            if (el) el.classList.add('hidden');
+        }
+
+        function getShareableRoomLink() {
+            try {
+                const url = new URL(window.location.href);
+                url.searchParams.set('sala', state.roomCode);
+                return url.toString();
+            } catch {
+                return `?sala=${state.roomCode}`;
+            }
+        }
+
+        /* =========================================================
+           9. ASIGNACIÓN DE EVENTOS DE USUARIO
+        ========================================================= */
+        function bindEvents() {
+            // Navegación inferior
+            document.querySelectorAll('.nav-tab-btn').forEach((btn) => {
+                btn.addEventListener('click', () => switchTab(btn.dataset.tab));
+            });
+
+            // Botones para abrir modal de agregar producto
+            document.getElementById('fabAddProductBtn').addEventListener('click', () => openProductModal(null));
+            document.getElementById('emptyAddProductBtn').addEventListener('click', () => openProductModal(null));
+            document.getElementById('loadSampleProductsBtn').addEventListener('click', loadSampleProducts);
+
+            // Delegación de eventos en la lista de productos
+            document.getElementById('productsList').addEventListener('click', (e) => {
+                const btn = e.target.closest('button[data-action]');
+                if (!btn) return;
+                const action = btn.dataset.action;
+                const id = btn.dataset.id;
+                const product = state.products.find(p => p.id === id);
+                if (!product) return;
+
+                if (action === 'inc') adjustProductSold(id, 1);
+                else if (action === 'dec') adjustProductSold(id, -1);
+                else if (action === 'add5') adjustProductSold(id, 5);
+                else if (action === 'exact') openExactQtyModal(product);
+                else if (action === 'edit') openProductModal(product);
+                else if (action === 'delete') {
+                    openConfirmModal({
+                        title: 'Eliminar producto',
+                        message: `¿Seguro que deseas eliminar "${product.name}" del catálogo? Esta acción se reflejará en vivo para todos.`,
+                        acceptLabel: 'Eliminar',
+                        onConfirm: () => deleteProduct(id)
+                    });
+                }
+            });
+
+            // Formulario Agregar/Editar Producto
+            document.getElementById('productForm').addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const id = document.getElementById('productEditId').value;
+                const name = document.getElementById('productNameInput').value;
+                const price = document.getElementById('productPriceInput').value;
+                closeModal('productModal');
+                await saveProduct({ id, name, price });
+            });
+
+            // Formulario Cantidad Exacta
+            document.getElementById('exactQtyForm').addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const id = document.getElementById('exactQtyProductId').value;
+                const val = document.getElementById('exactQtyInput').value;
+                closeModal('exactQtyModal');
+                await setProductExactSold(id, val);
+            });
+
+            // Botones +2, +5, +10, +20 dentro del modal de cantidad exacta
+            document.querySelectorAll('.quick-add-modal-btn').forEach((btn) => {
+                btn.addEventListener('click', () => {
+                    const input = document.getElementById('exactQtyInput');
+                    const current = Math.max(0, parseInt(input.value, 10) || 0);
+                    const add = parseInt(btn.dataset.quickAdd, 10) || 0;
+                    input.value = current + add;
+                });
+            });
+
+            // Modal Sala en Vivo / Compartir
+            document.getElementById('openRoomModalBtn').addEventListener('click', () => {
+                document.getElementById('joinRoomCodeInput').value = '';
+                document.getElementById('roomModal').classList.remove('hidden');
+            });
+
+            document.getElementById('shareQuickLinkBtn').addEventListener('click', () => {
+                document.getElementById('roomModal').classList.remove('hidden');
+            });
+
+            document.getElementById('copyRoomCodeBtn').addEventListener('click', () => {
+                copyTextToClipboard(state.roomCode, `Código ${state.roomCode} copiado`);
+            });
+
+            document.getElementById('copyRoomLinkBtn').addEventListener('click', () => {
+                copyTextToClipboard(getShareableRoomLink(), 'Enlace en vivo copiado');
+            });
+
+            // Modo Solo Lectura (espectador)
+            document.getElementById('spectatorToggle').addEventListener('change', (e) => {
+                state.spectatorMode = e.target.checked;
+                renderAll();
+                showToast(
+                    state.spectatorMode ? 'Modo Solo Lectura activado' : 'Modo edición habilitado',
+                    'info'
+                );
+            });
+
+            document.getElementById('disableSpectatorQuickBtn').addEventListener('click', () => {
+                state.spectatorMode = false;
+                renderAll();
+                showToast('Modo edición habilitado', 'info');
+            });
+
+            // Unirse a otra sala
+            document.getElementById('joinRoomForm').addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const input = document.getElementById('joinRoomCodeInput');
+                const code = input.value.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+                if (code.length < 4) {
+                    showToast('Ingresa un código de sala válido (mínimo 4 caracteres)', 'warning');
+                    return;
+                }
+                closeModal('roomModal');
+                await connectToRoom(code);
+            });
+
+            // Crear nueva sala
+            document.getElementById('createNewRoomBtn').addEventListener('click', () => {
+                openConfirmModal({
+                    title: 'Crear nueva sala en vivo',
+                    message: 'Se generará un código nuevo con una planilla en blanco. Podrás volver a esta sala usando su código actual.',
+                    acceptLabel: 'Crear Sala',
+                    onConfirm: async () => {
+                        closeModal('roomModal');
+                        await connectToRoom(generateRoomCode(), { forceNew: true });
+                    }
+                });
+            });
+
+            // Pestaña Cierre y Excel
+            document.getElementById('saveShiftNameBtn').addEventListener('click', () => {
+                saveShiftName(document.getElementById('shiftNameInput').value);
+            });
+            document.getElementById('shiftNameInput').addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    saveShiftName(e.target.value);
+                    e.target.blur();
+                }
+            });
+
+            document.getElementById('downloadXlsxBtn').addEventListener('click', exportToExcel);
+            document.getElementById('excelQuickDownloadBtn').addEventListener('click', exportToExcel);
+            document.getElementById('downloadCsvBtn').addEventListener('click', exportToCsv);
+            document.getElementById('copyWhatsAppBtn').addEventListener('click', copyWhatsAppSummary);
+
+            document.getElementById('resetShiftBtn').addEventListener('click', () => {
+                if (state.spectatorMode) {
+                    showToast('Modo Solo Lectura activo', 'warning');
+                    return;
+                }
+                openConfirmModal({
+                    title: 'Reiniciar jornada',
+                    message: 'Todos los contadores de ventas volverán a 0 y se limpiará el historial de movimientos. Tus productos y precios se mantendrán intactos.',
+                    acceptLabel: 'Sí, reiniciar',
+                    onConfirm: resetShiftCounters
+                });
+            });
+
+            // Cierre de modales (botones y clic fuera del cuadro)
+            document.querySelectorAll('[data-close-modal]').forEach((btn) => {
+                btn.addEventListener('click', () => closeModal(btn.dataset.closeModal));
+            });
+
+            ['productModal', 'exactQtyModal', 'roomModal'].forEach((modalId) => {
+                const backdrop = document.getElementById(modalId);
+                backdrop.addEventListener('click', (e) => {
+                    if (e.target === backdrop) closeModal(modalId);
+                });
+            });
+
+            // Modal confirmación
+            document.getElementById('confirmCancelBtn').addEventListener('click', closeConfirmModal);
+            document.getElementById('confirmAcceptBtn').addEventListener('click', async () => {
+                const action = pendingConfirmAction;
+                closeConfirmModal();
+                if (typeof action === 'function') await action();
+            });
+            document.getElementById('confirmModal').addEventListener('click', (e) => {
+                if (e.target === e.currentTarget) closeConfirmModal();
+            });
+        }
+
+        /* =========================================================
+           10. ARRANQUE DE LA APLICACIÓN
+        ========================================================= */
+        document.addEventListener('DOMContentLoaded', () => {
+            bindEvents();
+            switchTab('ventas');
+            initFirebase();
+        });
+    </script>
+<script>
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('./sw.js')
+        .catch((err) => console.error('Error registrando Service Worker:', err));
+    });
+  }
+</script>
+</body>
+</html>
